@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy app
+
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    env:
+      # CI never talks to Airwallex or an LLM: mock sandbox + scripted analyst.
+      AIRWALLEX_MODE: mock
+      LLM_MOCK: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  docker:
+    name: Docker build and smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ledgerguard:ci .
+      - name: Run in mock mode and drive one incident end to end
+        run: |
+          docker run -d --name lg -p 8000:8000 -e AIRWALLEX_MODE=mock -e LLM_MOCK=1 ledgerguard:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8000/health && break; sleep 1; done
+          python3 - <<'PY'
+          import json, urllib.request
+          def post(path, body):
+              req = urllib.request.Request("http://127.0.0.1:8000" + path, data=json.dumps(body).encode(),
+                                           headers={"Content-Type": "application/json"})
+              return json.load(urllib.request.urlopen(req))
+          inc = post("/api/incidents", {"text": "Atlas Components: EUR 4,000 for INV-2001 has not arrived"})
+          assert inc["action"]["kind"] == "REPLACE_PAYOUT", inc["action"]
+          a = post(f"/api/incidents/{inc['id']}/approve", {"approver": "ci"})
+          body = {"approval_id": a["approval_id"], "approval_token": a["approval_token"]}
+          r1 = post(f"/api/incidents/{inc['id']}/execute", body)
+          r2 = post(f"/api/incidents/{inc['id']}/execute", body)
+          assert r1["outcome"] == "transfer_created" and r2["outcome"] == "refused", (r1, r2)
+          print("smoke ok:", r1["message"])
+          PY
+      - if: always()
+        run: docker logs lg || true

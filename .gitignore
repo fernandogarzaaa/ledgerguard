@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets: never commit keys
+.env
+.env.*
+!.env.example
+
+# Local state
+data/ledger*.json
+data/*.tmp
+data/invoices.sandbox.json
+
+# Private research notes (strategy; keep out of the public repo)
+RESEARCH.md

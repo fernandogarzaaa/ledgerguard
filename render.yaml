@@ -1,0 +1,32 @@
+# Render free web service (sleeps when idle; $0). Public demo runs in mock mode.
+# For a live-sandbox deploy set AIRWALLEX_MODE=sandbox, the two keys, an
+# APPROVAL_PIN, and an invoice book (INVOICE_BOOK_PATH) in the dashboard.
+services:
+  - type: web
+    name: ledgerguard
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: AIRWALLEX_MODE
+        value: mock
+      - key: AIRWALLEX_CLIENT_ID
+        sync: false
+      - key: AIRWALLEX_API_KEY
+        sync: false
+      - key: AIRWALLEX_WEBHOOK_SECRET
+        sync: false
+      - key: APPROVAL_PIN
+        sync: false
+      - key: APPROVAL_SECRET
+        generateValue: true
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: LLM_API_KEY
+        sync: false
+      - key: RATE_LIMIT_PER_10MIN
+        value: "30"

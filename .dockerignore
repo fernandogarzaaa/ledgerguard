@@ -1,0 +1,13 @@
+.git
+.venv
+.env
+.env.*
+tests
+docs
+scripts
+data/ledger*.json
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+RESEARCH.md

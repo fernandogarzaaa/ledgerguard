@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledgerguard · Payment Ops Incident Commander</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <div>
+        <h1>Ledgerguard</h1>
+        <p>Payment-ops incident commander on Airwallex · resolves "we never got paid" without paying twice</p>
+      </div>
+    </div>
+    <div class="status" id="status">…</div>
+  </header>
+
+  <main class="grid">
+    <section class="card intake">
+      <h2>1 · Incident</h2>
+      <textarea id="text" rows="4" placeholder='e.g. "Kestrel Supply Co says invoice INV-1042 was never paid"'></textarea>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="useLlm" checked> use LLM analyst</label>
+        <button id="go" class="primary">Investigate</button>
+      </div>
+      <div class="presets" id="presets"></div>
+      <div class="mocktools" id="mocktools" hidden>
+        <button id="reset" class="ghost">Reset mock sandbox</button>
+        <span class="hint">Mock mode: synthetic Airwallex sandbox, no real money.</span>
+      </div>
+    </section>
+
+    <section class="card decision" id="decisionCard" hidden>
+      <h2>3 · Decision <span class="pill" id="case"></span></h2>
+      <h3 id="actionTitle"></h3>
+      <p id="rationale"></p>
+      <dl class="notes">
+        <dt>Cost</dt><dd id="cost"></dd>
+        <dt>Risk</dt><dd id="risk"></dd>
+        <dt>Binding</dt><dd id="binding" class="mono"></dd>
+      </dl>
+      <h4>Evidence</h4>
+      <ul id="evidence" class="evidence"></ul>
+      <div class="approve">
+        <input id="approver" placeholder="Your name (approver)" maxlength="80">
+        <input id="pin" placeholder="PIN" type="password" hidden>
+        <button id="approveBtn" class="primary">Approve &amp; execute</button>
+        <button id="replayBtn" class="ghost" title="Send the same approval again: must be refused">Try executing again</button>
+      </div>
+      <div id="execResult" class="exec" hidden></div>
+    </section>
+
+    <section class="card timeline" id="timelineCard" hidden>
+      <h2>2 · Timeline <span class="sub" id="invoiceLine"></span></h2>
+      <ol id="timeline"></ol>
+    </section>
+
+    <section class="card outputs" id="outputsCard" hidden>
+      <h2>4 · Supplier message <button class="ghost small" data-copy="supplier">copy</button></h2>
+      <pre id="supplier" class="msg"></pre>
+      <h2>Incident report <button class="ghost small" data-copy="report">copy</button> <a id="reportLink" class="small" target="_blank">open .md</a></h2>
+      <pre id="report" class="report"></pre>
+    </section>
+
+    <section class="card trace" id="traceCard" hidden>
+      <h2>Agent trace <span class="sub" id="model"></span></h2>
+      <ol id="trace"></ol>
+    </section>
+  </main>
+
+  <footer>Sandbox only. The model reads; code decides; a person approves; Airwallex moves the money. ·
+    <a href="https://github.com/fernandogarzaaa/ledgerguard">source</a></footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>
