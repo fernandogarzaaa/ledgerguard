@@ -1,0 +1,35 @@
+name: sandbox-live-check
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Also run seed_sandbox.py (creates sandbox beneficiaries/transfers)"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    env:
+      AIRWALLEX_CLIENT_ID: ${{ secrets.AIRWALLEX_CLIENT_ID }}
+      AIRWALLEX_API_KEY: ${{ secrets.AIRWALLEX_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . 2>/dev/null || pip install -r requirements.txt
+      - name: Probe (read-only)
+        run: python scripts/probe_airwallex.py
+      - name: Seed sandbox
+        if: ${{ inputs.seed }}
+        run: python scripts/seed_sandbox.py
+      - name: Commit invoice book
+        if: ${{ inputs.seed }}
+        run: |
+          git config user.name "ledgerguard-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f data/invoices.sandbox.json
+          git commit -m "chore: seeded sandbox invoice book" || true
+          git push
