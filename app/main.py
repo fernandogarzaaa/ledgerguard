@@ -177,6 +177,20 @@ def create_app(svc: IncidentService | None = None) -> FastAPI:
         _inc(incident_id)
         return await service.execute(incident_id, body.approval_id, body.approval_token)
 
+    @app.get("/api/admin/probe")
+    async def admin_probe(request: Request) -> dict[str, Any]:
+        """Read-only response-shape probe (types only, no values). Off unless ENABLE_PROBE=1."""
+        if os.getenv("ENABLE_PROBE") != "1":
+            raise HTTPException(404, "not found")
+        _rate(request)
+        cfg = service.settings
+        if not cfg.airwallex_client_id or not cfg.airwallex_api_key:
+            raise HTTPException(400, "sandbox keys not configured")
+        from app.probe import run_probe
+
+        c = AirwallexClient(cfg.airwallex_base_url, cfg.airwallex_client_id, cfg.airwallex_api_key)
+        return await run_probe(c)
+
     # -- sandbox/mock staging helpers -------------------------------------------
     @app.post("/api/sim/transfers/{transfer_id}/transition")
     async def transition(transfer_id: str, body: TransitionIn) -> dict[str, Any]:
