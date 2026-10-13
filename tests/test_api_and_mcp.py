@@ -94,6 +94,14 @@ def test_webhook_signature_verified(settings, mock):
     assert api.post("/webhooks/airwallex", content=reser, headers=h).status_code == 400
 
 
+def test_webhook_non_ascii_signature_is_400_not_500(settings, mock):
+    svc = build_service(replace(settings, webhook_secret="whsec"), mock=mock)
+    api = TestClient(create_app(svc), raise_server_exceptions=False)
+    headers = {b"x-timestamp": str(int(time.time() * 1000)).encode(), b"x-signature": b"\xe9\xe9"}
+    r = api.post("/webhooks/airwallex", content=b"{}", headers=headers)
+    assert r.status_code == 400
+
+
 # -- MCP ---------------------------------------------------------------------------
 def test_mcp_initialize_and_list(api):
     init = rpc(api, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}})
@@ -185,5 +193,8 @@ def test_mcp_errors(api):
     ).json()
     assert bad["error"]["code"] == -32700
     assert rpc(api, "ping")["result"] == {}
+    for params in ("x", [1], 5):
+        assert rpc(api, "initialize", params)["error"]["code"] == -32602
+        assert rpc(api, "tools/call", params)["error"]["code"] == -32602
     r = rpc(api, "tools/call", {"name": "get_transfer", "arguments": {}})
     assert r["result"]["isError"]

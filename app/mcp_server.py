@@ -41,6 +41,8 @@ async def handle_message(svc: IncidentService, msg: dict[str, Any]) -> dict[str,
     mid = msg.get("id")
     params = msg.get("params") or {}
     is_notification = "id" not in msg
+    if not isinstance(params, dict):
+        return _error(mid, -32602, "params must be an object")
     if method == "initialize":
         requested = str(params.get("protocolVersion") or PROTOCOL_VERSION)
         return _result(
