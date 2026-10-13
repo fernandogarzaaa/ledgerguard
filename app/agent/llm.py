@@ -6,7 +6,9 @@ OpenRouter, Nebius Token Factory, OpenAI, Groq, a local vLLM/llama.cpp server.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -76,6 +78,7 @@ class OpenAICompatibleLLM:
     timeout_s: float = 60.0
     transport: httpx.AsyncBaseTransport | None = None
     temperature: float = 0.2
+    max_retries: int = 4
 
     @property
     def name(self) -> str:
@@ -93,6 +96,10 @@ class OpenAICompatibleLLM:
             "temperature": self.temperature,
             "max_tokens": max_tokens,
         }
+        if "gpt-oss" in self.model:
+            # Reasoning models spend max_tokens on hidden reasoning first; keep it short
+            # so the visible answer is not truncated to an empty string.
+            body["reasoning_effort"] = "low"
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
@@ -101,7 +108,16 @@ class OpenAICompatibleLLM:
             headers["HTTP-Referer"] = "https://github.com/fernandogarzaaa/ledgerguard"
             headers["X-Title"] = "Ledgerguard"
         async with httpx.AsyncClient(timeout=self.timeout_s, transport=self.transport) as http:
-            resp = await http.post(f"{self.base_url}/chat/completions", json=body, headers=headers)
+            for attempt in range(self.max_retries + 1):
+                resp = await http.post(
+                    f"{self.base_url}/chat/completions", json=body, headers=headers
+                )
+                if resp.status_code != 429 or attempt == self.max_retries:
+                    break
+                await asyncio.sleep(_rate_limit_wait(resp, attempt))
+        salvaged = _salvage_tool_use_failure(resp, tools)
+        if salvaged is not None:
+            return salvaged
         if resp.status_code >= 400:
             raise LLMError(f"LLM HTTP {resp.status_code}: {resp.text[:300]}")
         data = resp.json()
@@ -120,6 +136,54 @@ class OpenAICompatibleLLM:
         return LLMReply(
             content=message.get("content") or "", tool_calls=calls, usage=data.get("usage") or {}
         )
+
+
+def _salvage_tool_use_failure(
+    resp: httpx.Response, tools: list[dict[str, Any]] | None
+) -> LLMReply | None:
+    """Recover a final answer the model wrongly emitted as a call to a non-existent tool.
+
+    Groq rejects such generations with 400 ``tool_use_failed`` and returns the text in
+    ``failed_generation``; reasoning models sometimes wrap their final JSON that way.
+    """
+    if resp.status_code != 400:
+        return None
+    try:
+        err = resp.json().get("error") or {}
+    except ValueError:
+        return None
+    if err.get("code") != "tool_use_failed" or not err.get("failed_generation"):
+        return None
+    known = {t.get("function", {}).get("name") for t in tools or []}
+    payload = extract_json(str(err["failed_generation"]))
+    if not payload or payload.get("name") in known:
+        return None
+    args = payload.get("arguments")
+    if isinstance(args, str):
+        args = _parse_args(args)
+    if not isinstance(args, dict) or not args:
+        return None
+    return LLMReply(content=json.dumps(args))
+
+
+_TRY_AGAIN = re.compile(r"try again in\s+(?:(\d+)m)?([\d.]+)(ms|s)", re.IGNORECASE)
+
+
+def _rate_limit_wait(resp: httpx.Response, attempt: int, cap: float = 20.0) -> float:
+    """Seconds to wait after a 429: Retry-After header, provider hint, or backoff."""
+    header = resp.headers.get("retry-after")
+    if header:
+        try:
+            return min(max(float(header), 0.5), cap)
+        except ValueError:
+            pass
+    match = _TRY_AGAIN.search(resp.text or "")
+    if match:
+        minutes = float(match.group(1) or 0)
+        value = float(match.group(2))
+        secs = minutes * 60 + (value / 1000 if match.group(3).lower() == "ms" else value)
+        return min(secs + 0.5, cap)
+    return min(2.0 * (2**attempt), cap)
 
 
 def extract_json(text: str) -> dict[str, Any] | None:
