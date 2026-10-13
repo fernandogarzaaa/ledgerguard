@@ -242,7 +242,10 @@ def create_app(svc: IncidentService | None = None) -> FastAPI:
             ts = request.headers.get("x-timestamp", "")
             sig = request.headers.get("x-signature", "")
             expected = hmac.new(secret.encode(), ts.encode() + raw, hashlib.sha256).hexdigest()
-            if not sig or not hmac.compare_digest(expected, sig):
+            # compare bytes: a non-ASCII header makes compare_digest(str, str) raise
+            if not sig or not hmac.compare_digest(
+                expected.encode(), sig.encode("utf-8", "replace")
+            ):
                 raise HTTPException(400, "failed to verify webhook signature")
             try:
                 if abs(time.time() * 1000 - int(ts)) > WEBHOOK_TOLERANCE_MS:
